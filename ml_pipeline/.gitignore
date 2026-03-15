@@ -1,0 +1,22 @@
+# Virtual environment
+.venv/
+
+# Python cache
+__pycache__/
+*.pyc
+
+# Ignore files inside folders
+data/images/*
+data/videos/*
+models/*
+outputs/*
+
+# Keep folders
+!data/images/.gitkeep
+!data/videos/.gitkeep
+!models/.gitkeep
+!outputs/.gitkeep
+
+# OS files
+.DS_Store
+Thumbs.db
