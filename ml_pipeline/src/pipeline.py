@@ -12,7 +12,6 @@ from deep_sort_realtime.deepsort_tracker import DeepSort
 
 device = "cuda" if torch.cuda.is_available() else "cpu"
 print(f"Running on: {device}")
-
 yolo_model = YOLO('yolov8n.pt')
 
 tracker = DeepSort(
