@@ -35,9 +35,16 @@ arcface_model.prepare(ctx_id=0 if device == "cuda" else -1)
 
 # ─── Config ───────────────────────────────────────────────────────────────────
 
-OSNET_THRESHOLD   = 0.6
-ARCFACE_THRESHOLD = 0.55
-FRAME_SKIP        = 2
+OSNET_THRESHOLD        = 0.6
+ARCFACE_THRESHOLD      = 0.55
+REID_MEMORY_THRESHOLD  = 0.6
+FRAME_SKIP             = 2
+
+# ─── Re-ID Memory ─────────────────────────────────────────────────────────────
+
+reid_memory          = {}
+track_to_persistent  = {}
+next_persistent_id   = 2   # 1 is reserved for target
 
 # ─── OSNet Preprocessing ─────────────────────────────────────────────────────
 
@@ -78,6 +85,33 @@ def get_arcface_embedding(image):
 
 def cosine_similarity(a, b):
     return float(np.dot(a, b))
+
+# ─── Persistent ID ────────────────────────────────────────────────────────────
+
+def get_persistent_id(track_id, embedding):
+    global next_persistent_id
+
+    if track_id in track_to_persistent:
+        return track_to_persistent[track_id]
+
+    best_match_id = None
+    best_sim      = 0.0
+    for pid, mem_emb in reid_memory.items():
+        sim = cosine_similarity(embedding, mem_emb)
+        if sim > best_sim:
+            best_sim      = sim
+            best_match_id = pid
+
+    if best_sim >= REID_MEMORY_THRESHOLD:
+        track_to_persistent[track_id] = best_match_id
+        reid_memory[best_match_id]    = embedding
+        return best_match_id
+    else:
+        pid = next_persistent_id
+        next_persistent_id += 1
+        track_to_persistent[track_id] = pid
+        reid_memory[pid]              = embedding
+        return pid
 
 # ─── YOLOv8 Detection ────────────────────────────────────────────────────────
 
@@ -179,25 +213,30 @@ def find_person_in_video(image_path, video_path, output_path="output.avi"):
                         face_sim   = cosine_similarity(ref_arcface, arc_emb)
                         face_match = face_sim >= ARCFACE_THRESHOLD
 
-                matched = body_match or face_match
+                matched = body_match and face_match
 
                 if matched:
-                    timestamp = frame_idx / fps
-                    match_records.append((frame_idx, timestamp, track_id, max(body_sim, face_sim)))
+                    # always assign ID 1 to target
+                    track_to_persistent[track_id] = 1
+                    reid_memory[1]                = osnet_emb
+                    timestamp                     = frame_idx / fps
+                    match_records.append((frame_idx, timestamp, 1, max(body_sim, face_sim)))
                     found = True
 
                     cv2.rectangle(frame, (x1, y1), (x2, y2), (0, 255, 0), 2)
                     cv2.putText(
-                        frame, f"Person ID: {track_id}",
+                        frame, f"Person ID: 1",
                         (x1, max(y1 - 8, 15)),
                         cv2.FONT_HERSHEY_SIMPLEX, 0.55, (0, 255, 0), 2
                     )
                     print(f"  Match  frame={frame_idx:5d}  t={timestamp:6.2f}s  "
-                          f"track={track_id}  body={body_sim:.4f}  face={face_sim:.4f}")
+                          f"track={track_id}  pid=1  "
+                          f"body={body_sim:.4f}  face={face_sim:.4f}")
                 else:
+                    non_target_id = get_persistent_id(track_id, osnet_emb) if osnet_emb is not None else track_id
                     cv2.rectangle(frame, (x1, y1), (x2, y2), (160, 160, 160), 1)
                     cv2.putText(
-                        frame, f"id:{track_id}",
+                        frame, f"Person ID: {non_target_id}",
                         (x1, max(y1 - 6, 12)),
                         cv2.FONT_HERSHEY_SIMPLEX, 0.45, (160, 160, 160), 1
                     )
