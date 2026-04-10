@@ -7,7 +7,7 @@ from deep_sort_realtime.deepsort_tracker import DeepSort
 # ─── Load Models ─────────────────────────────────────────────────────────────
 
 # YOLOv8 - person detector
-yolo_model = YOLO('yolov8n.pt')
+yolo_model = YOLO('models/yolov8n.pt')
 
 # DeepSORT - multi-person tracker
 tracker = DeepSort(max_age=30, n_init=3, nn_budget=100, max_cosine_distance=0.3)  # Fix 2: stricter re-association
@@ -226,7 +226,7 @@ def find_person_in_video(image_path, video_path, output_path="output.avi"):
 # ─── Run ──────────────────────────────────────────────────────────────────────
 
 find_person_in_video(
-    image_path="image1.jpg",
-    video_path="video.mp4",
-    output_path="output.avi"   # .avi works on all video players
+    image_path="data/images/image1.jpg",
+    video_path="data/videos/video1.mp4",
+    output_path="outputs/output1.avi"   # .avi works on all video players
 )

@@ -13,7 +13,7 @@ from deep_sort_realtime.deepsort_tracker import DeepSort
 device = "cuda" if torch.cuda.is_available() else "cpu"
 print(f"Running on: {device}")
 
-yolo_model = YOLO('yolov8n.pt')
+yolo_model = YOLO('models/yolov8n.pt')
 
 tracker = DeepSort(
     max_age=30,
@@ -279,7 +279,7 @@ def find_person_in_video(image_path, video_path, output_path="output.avi"):
 
 if __name__ == "__main__":
     find_person_in_video(
-        image_path="image1.jpg",
-        video_path="video.mp4",
-        output_path="output.avi"
+        image_path="data/images/image1.jpg",
+        video_path="data/videos/video1.mp4",
+        output_path="output/output.avi"
     )
