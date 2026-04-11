@@ -22,6 +22,18 @@ env/
 *.pkl
 ml_pipeline/src/
 
+# ─── SlowFast / large asset directories ────────────────────────────────────────
+# These directories can contain multi-hundred-MB model weights and raw footage.
+# Use Git LFS (see GIT_LFS_GUIDE.md) if you need to version-control these assets.
+slowfast-model/
+sample-footage/
+
+# ─── Large binary / generated asset file types ─────────────────────────────────
+*.npy
+*.mp4
+*.dav
+demo_output_*
+
 # ─── Data / outputs ────────────────────────────────────────────────────────────
 data/inputs/*
 data/outputs/*
