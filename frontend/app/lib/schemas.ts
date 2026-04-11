@@ -9,7 +9,7 @@ export const profileSchema = z.object({
 
 export type ProfileFormData = z.infer<typeof profileSchema>;
 
-// Signup schema (no Bar Association ID)
+// Signup schema
 export const signupSchema = z.object({
   fullName: z.string().min(2, 'Full name is required'),
   workEmail: z.string().email('Enter a valid work email'),

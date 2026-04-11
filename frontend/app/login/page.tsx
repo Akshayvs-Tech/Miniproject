@@ -5,13 +5,16 @@ import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { useMutation } from '@tanstack/react-query';
 import { loginSchema, LoginFormData } from '../lib/schemas';
+import { useAppContext } from '../lib/store';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { Mail, Phone, Lock, ArrowRight, Eye, EyeOff, ShieldCheck } from 'lucide-react';
+import { Mail, Phone, Lock, ArrowRight, Eye, EyeOff, ShieldCheck, AlertCircle } from 'lucide-react';
 
 export default function LoginPage() {
   const router = useRouter();
+  const { loginUser } = useAppContext();
   const [showPassword, setShowPassword] = useState(false);
+  const [loginError, setLoginError] = useState<string | null>(null);
 
   const {
     register,
@@ -23,15 +26,25 @@ export default function LoginPage() {
 
   const loginMutation = useMutation({
     mutationFn: async (data: LoginFormData) => {
-      await new Promise((r) => setTimeout(r, 1200));
+      const result = loginUser(data.email, data.phoneNumber, data.password);
+      if (!result.success) {
+        throw new Error(result.error);
+      }
       return data;
     },
     onSuccess: () => {
+      setLoginError(null);
       router.push('/dashboard');
+    },
+    onError: (err: Error) => {
+      setLoginError(err.message);
     },
   });
 
-  const onSubmit = (data: LoginFormData) => loginMutation.mutate(data);
+  const onSubmit = (data: LoginFormData) => {
+    setLoginError(null);
+    loginMutation.mutate(data);
+  };
 
   return (
     <div
@@ -135,6 +148,27 @@ export default function LoginPage() {
               Authorized Legal Personnel Only
             </p>
           </div>
+
+          {/* Error Banner */}
+          {loginError && (
+            <div
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: '0.625rem',
+                padding: '0.75rem 1rem',
+                background: '#fef2f2',
+                border: '1px solid #fca5a5',
+                borderRadius: '8px',
+                marginBottom: '1.25rem',
+              }}
+            >
+              <AlertCircle size={16} color="#dc2626" style={{ flexShrink: 0 }} />
+              <p style={{ color: '#dc2626', fontSize: '0.82rem', fontWeight: 500, lineHeight: 1.4 }}>
+                {loginError}
+              </p>
+            </div>
+          )}
 
           {/* Form */}
           <form onSubmit={handleSubmit(onSubmit)} style={{ display: 'flex', flexDirection: 'column', gap: '1.1rem' }}>

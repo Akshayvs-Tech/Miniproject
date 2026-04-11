@@ -5,12 +5,14 @@ import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { useMutation } from '@tanstack/react-query';
 import { signupSchema, SignupFormData } from '../lib/schemas';
+import { useAppContext } from '../lib/store';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { User, Mail, Phone, Lock, ArrowRight, Eye, EyeOff } from 'lucide-react';
 
 export default function SignupPage() {
   const router = useRouter();
+  const { registerUser } = useAppContext();
   const [showPassword, setShowPassword] = useState(false);
 
   const {
@@ -24,10 +26,16 @@ export default function SignupPage() {
 
   const signupMutation = useMutation({
     mutationFn: async (data: SignupFormData) => {
-      await new Promise((r) => setTimeout(r, 1200));
+      await new Promise((r) => setTimeout(r, 800));
       return data;
     },
-    onSuccess: () => {
+    onSuccess: (data) => {
+      registerUser({
+        fullName: data.fullName,
+        workEmail: data.workEmail,
+        phoneNumber: data.phoneNumber,
+        password: data.password,
+      });
       router.push('/login');
     },
   });
@@ -172,13 +180,13 @@ export default function SignupPage() {
               </p>
             </div>
 
-            {/* Bottom user card */}
+            {/* Bottom info card */}
             <div
               style={{
                 borderTop: '1px solid rgba(255,255,255,0.12)',
                 paddingTop: '1.5rem',
                 display: 'flex',
-                alignItems: 'center',
+                alignItems: 'flex-start',
                 gap: '0.875rem',
               }}
             >
@@ -187,20 +195,21 @@ export default function SignupPage() {
                   width: '40px',
                   height: '40px',
                   borderRadius: '50%',
-                  background: '#1b2a4a',
+                  background: 'rgba(212,160,23,0.15)',
                   border: '2px solid #d4a017',
                   display: 'flex',
                   alignItems: 'center',
                   justifyContent: 'center',
                   flexShrink: 0,
-                  overflow: 'hidden',
                 }}
               >
-                <span style={{ color: '#d4a017', fontWeight: 700, fontSize: '0.9rem' }}>J</span>
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
+                  <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" stroke="#d4a017" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                </svg>
               </div>
               <div>
-                <p style={{ color: '#fff', fontWeight: 600, fontSize: '0.875rem' }}>Jonathan Sterling</p>
-                <p style={{ color: 'rgba(255,255,255,0.5)', fontSize: '0.75rem' }}>Senior Partner, Sterling &amp; Associates</p>
+                <p style={{ color: '#fff', fontWeight: 600, fontSize: '0.875rem', marginBottom: '0.25rem' }}>Secure & Confidential</p>
+                <p style={{ color: 'rgba(255,255,255,0.5)', fontSize: '0.75rem', lineHeight: 1.5 }}>Your credentials are only stored locally in this session. Use the same email, phone, and password to log in.</p>
               </div>
             </div>
           </div>

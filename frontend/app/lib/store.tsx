@@ -3,6 +3,13 @@
 import { createContext, useContext, useState, ReactNode } from 'react';
 import { AnalysisResult } from './schemas';
 
+export interface RegisteredUser {
+  fullName: string;
+  workEmail: string;
+  phoneNumber: string;
+  password: string;
+}
+
 interface ProfileData {
   fullName: string;
   jobTitle: string;
@@ -18,12 +25,15 @@ interface AppState {
   uploadedVideo: File | null;
   uploadedImage: File | null;
   setUploadedFiles: (video: File | null, image: File | null) => void;
+  registeredUser: RegisteredUser | null;
+  registerUser: (user: RegisteredUser) => void;
+  loginUser: (email: string, phone: string, password: string) => { success: boolean; error?: string };
 }
 
 const defaultProfile: ProfileData = {
-  fullName: 'Jonathan H. Sterling, Esq.',
-  jobTitle: 'Senior Partner',
-  roleDepartment: 'Corporate Law & Litigation',
+  fullName: '',
+  jobTitle: '',
+  roleDepartment: '',
   photoUrl: '',
 };
 
@@ -34,6 +44,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const [analysisResult, setAnalysisResult] = useState<AnalysisResult | null>(null);
   const [uploadedVideo, setUploadedVideo] = useState<File | null>(null);
   const [uploadedImage, setUploadedImage] = useState<File | null>(null);
+  const [registeredUser, setRegisteredUser] = useState<RegisteredUser | null>(null);
 
   const setProfile = (data: Partial<ProfileData>) => {
     setProfileState((prev) => ({ ...prev, ...data }));
@@ -42,6 +53,27 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const setUploadedFiles = (video: File | null, image: File | null) => {
     setUploadedVideo(video);
     setUploadedImage(image);
+  };
+
+  const registerUser = (user: RegisteredUser) => {
+    setRegisteredUser(user);
+    setProfileState((prev) => ({ ...prev, fullName: user.fullName }));
+  };
+
+  const loginUser = (email: string, phone: string, password: string): { success: boolean; error?: string } => {
+    if (!registeredUser) {
+      return { success: false, error: 'No account found. Please sign up first.' };
+    }
+    if (registeredUser.workEmail !== email) {
+      return { success: false, error: 'Email address does not match our records.' };
+    }
+    if (registeredUser.phoneNumber !== phone) {
+      return { success: false, error: 'Phone number does not match our records.' };
+    }
+    if (registeredUser.password !== password) {
+      return { success: false, error: 'Incorrect password. Please try again.' };
+    }
+    return { success: true };
   };
 
   return (
@@ -54,6 +86,9 @@ export function AppProvider({ children }: { children: ReactNode }) {
         uploadedVideo,
         uploadedImage,
         setUploadedFiles,
+        registeredUser,
+        registerUser,
+        loginUser,
       }}
     >
       {children}
