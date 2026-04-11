@@ -5,13 +5,27 @@
 __pycache__/
 *.pyc
 
-# Ignore files inside folders
+# Model weights and checkpoints (anywhere in ml_pipeline/)
+*.pt
+*.pth
+*.onnx
+*.pkl
+*.npy
+# Also ignore anything placed directly in the models/ folder
+models/*
+
+# Media / data files
+*.mp4
+*.avi
+*.dav
+*.mov
+*.mkv
 data/images/*
 data/videos/*
-models/*
 outputs/*
+demo_output_*
 
-# Keep folders
+# Keep empty folders via .gitkeep
 !data/images/.gitkeep
 !data/videos/.gitkeep
 !models/.gitkeep
