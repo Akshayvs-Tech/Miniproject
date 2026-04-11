@@ -1,0 +1,6 @@
+fight
+riding_lmv
+run
+sit
+stand
+walk
