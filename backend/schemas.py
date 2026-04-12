@@ -11,6 +11,7 @@ class MatchRecord(BaseModel):
     timestamp_sec: float
     track_id:      int
     similarity:    float
+    action:        Optional[str] = None
 
 class ProcessResult(BaseModel):
     found:                bool
@@ -20,6 +21,7 @@ class ProcessResult(BaseModel):
     best_match:           Optional[MatchRecord] = None
     matched_track_ids:    list[int]
     output_video_id:      Optional[str] = None
+    match_history:        list[MatchRecord] = []
 
 # ─── Auth Schemas ─────────────────────────────────────────────────────────────
 

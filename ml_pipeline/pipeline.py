@@ -10,7 +10,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from deep_sort_realtime.deepsort_tracker import DeepSort
 
-from ml_pipeline import arcface, osnet_reid
+from ml_pipeline import arcface, osnet_reid, action_recognition
 from ml_pipeline.config import (
     OUTPUT_DIR,
     FRAME_SKIP,
@@ -19,6 +19,7 @@ from ml_pipeline.config import (
     DEEPSORT_NN_BUDGET,
     DEEPSORT_MAX_COSINE_DIST,
 )
+from collections import deque
 
 # ─── Result Schema ────────────────────────────────────────────────────────────
 
@@ -29,6 +30,7 @@ class MatchRecord:
     track_id:      int
     similarity:    float
     match_type:    str
+    action:        str = "analyzing..."
 
 @dataclass
 class PipelineResult:
@@ -65,6 +67,9 @@ def run(img_path: str, vid_path: str, video_id: str) -> PipelineResult:
             "Could not extract any features (face or body) from the reference image."
         )
 
+    # Init Action Models
+    action_recognition.init_models()
+
     # ── Step 2: Open video ──────────────────────────────────────────────────
     cap = cv2.VideoCapture(vid_path)
     if not cap.isOpened():
@@ -92,8 +97,16 @@ def run(img_path: str, vid_path: str, video_id: str) -> PipelineResult:
     )
 
     # ── Step 3: Frame loop ──────────────────────────────────────────────────
+    # ── Step 3: Global state for action recognition ─────────────────────────
     frame_idx    = 0
     match_records: list[MatchRecord] = []
+
+    # Per-track state
+    track_kp_buffer = {}
+    track_kp_history = {}
+    track_vote_deque = {}
+    track_fight_timer = {}
+    track_last_action = {}
 
     while True:
         ret, frame = cap.read()
@@ -146,6 +159,24 @@ def run(img_path: str, vid_path: str, video_id: str) -> PipelineResult:
                             best_sim   = max(best_sim, sim_osnet)
                             match_type += "[Body]"
 
+                # ── Action Recognition ──
+                if track_id not in track_kp_buffer:
+                    track_kp_buffer[track_id] = deque(maxlen=action_recognition.SEQ_LEN)
+                    track_kp_history[track_id] = deque(maxlen=10)
+                    track_vote_deque[track_id] = deque(maxlen=action_recognition.VOTE_WINDOW)
+                    track_fight_timer[track_id] = [0.0]  # list for ref
+                    track_last_action[track_id] = ("analyzing...", 0.0)
+
+                kp, vis, mp_res = action_recognition.extract_keypoints(crop)
+                track_kp_buffer[track_id].append(kp)
+                track_kp_history[track_id].append(kp)
+
+                act_label, act_conf, act_src = action_recognition.predict_action(
+                    track_id, kp, track_kp_history[track_id], track_kp_buffer[track_id],
+                    mp_res, vis, track_vote_deque[track_id], track_fight_timer[track_id], fps
+                )
+                track_last_action[track_id] = (act_label, act_conf)
+
                 if is_match:
                     ts = round(frame_idx / fps, 3)
                     record = MatchRecord(
@@ -154,21 +185,28 @@ def run(img_path: str, vid_path: str, video_id: str) -> PipelineResult:
                         track_id=track_id,
                         similarity=round(best_sim, 4),
                         match_type=match_type,
+                        action=track_last_action[track_id][0]
                     )
                     match_records.append(record)
-                    print(f"  [MATCH] frame={frame_idx}  t={ts}s  track={track_id}  sim={best_sim:.4f} {match_type}")
+                    print(f"  [MATCH] frame={frame_idx}  t={ts}s  track={track_id}  sim={best_sim:.4f} {match_type} action={record.action}")
 
                     cv2.rectangle(frame, (x1, y1), (x2, y2), (0, 255, 0), 2)
                     cv2.putText(
                         frame,
                         f"TARGET {match_type} id:{track_id} sim:{best_sim:.2f}",
-                        (x1, max(y1 - 8, 15)),
+                        (x1, max(y1 - 25, 15)),
                         cv2.FONT_HERSHEY_SIMPLEX, 0.55, (0, 255, 0), 2,
+                    )
+                    cv2.putText(
+                        frame,
+                        f"Action: {record.action}",
+                        (x1, max(y1 - 8, 15)),
+                        cv2.FONT_HERSHEY_SIMPLEX, 0.50, (0, 255, 255), 2,
                     )
                 else:
                     cv2.rectangle(frame, (x1, y1), (x2, y2), (160, 160, 160), 1)
                     cv2.putText(
-                        frame, f"id:{track_id}",
+                        frame, f"id:{track_id} | {track_last_action[track_id][0]}",
                         (x1, max(y1 - 6, 12)),
                         cv2.FONT_HERSHEY_SIMPLEX, 0.45, (160, 160, 160), 1,
                     )
@@ -182,6 +220,8 @@ def run(img_path: str, vid_path: str, video_id: str) -> PipelineResult:
         writer.write(frame)
         frame_idx += 1
 
+    # Cleanup
+    action_recognition.cleanup()
     cap.release()
     writer.release()
     print(f"[pipeline] Done — {frame_idx} frames processed.")

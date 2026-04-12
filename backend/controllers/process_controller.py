@@ -58,8 +58,18 @@ async def handle_process(
             "timestamp_sec": best.timestamp_sec,
             "track_id":      best.track_id,
             "similarity":    best.similarity,
+            "action":        best.action,
         } if best else None,
         "matched_track_ids": result.matched_track_ids,
+        "match_history": [
+            {
+                "frame":         r.frame,
+                "timestamp_sec": r.timestamp_sec,
+                "track_id":      r.track_id,
+                "similarity":    r.similarity,
+                "action":        r.action,
+            } for r in result.match_records
+        ],
         "created_at":        datetime.utcnow(),
     })
 
@@ -73,7 +83,17 @@ async def handle_process(
             timestamp_sec = best.timestamp_sec,
             track_id      = best.track_id,
             similarity    = best.similarity,
+            action        = best.action,
         ) if best else None,
         matched_track_ids = result.matched_track_ids,
         output_video_id   = video_id if found else None,
+        match_history     = [
+            MatchRecord(
+                frame         = r.frame,
+                timestamp_sec = r.timestamp_sec,
+                track_id      = r.track_id,
+                similarity    = r.similarity,
+                action        = r.action,
+            ) for r in result.match_records
+        ],
     )

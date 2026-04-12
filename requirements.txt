@@ -1,5 +1,7 @@
-# ─── Full project requirements ────────────────────────────────────────────────
-# Install from project root: pip install -r requirements.txt
+# Full project (ML + FastAPI backend). Install from repo root:
+#   pip install -r requirements.txt
+#
+# Re-ID code lives under ml_pipeline/torchreid in this repo (no separate torchreid pip install).
 
 # ── ML / CV ──────────────────────────────────────────────────────────────────
 ultralytics==8.4.21
@@ -15,6 +17,9 @@ onnxruntime==1.23.2
 yacs==0.1.8
 h5py
 tensorboard==2.20.0
+matplotlib==3.10.8
+mediapipe==0.10.33
+pytorchvideo==0.1.5
 
 # ── Backend / API ─────────────────────────────────────────────────────────────
 fastapi==0.115.0
@@ -25,8 +30,9 @@ pymongo==4.9.2
 dnspython==2.6.1
 python-dotenv==1.0.0
 pydantic>=2.0.0
+python-jose[cryptography]==3.3.0
+passlib[bcrypt]==1.7.4
 
 # ── Utilities ─────────────────────────────────────────────────────────────────
-matplotlib==3.10.8
 gdown==5.2.1
 setuptools==69.5.1

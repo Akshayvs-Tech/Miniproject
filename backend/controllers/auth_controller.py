@@ -1,6 +1,10 @@
 """
 backend/controllers/auth_controller.py
 Business logic for user registration and login.
+
+Not used by FastAPI: routes live in backend/routes/auth.py with different fields
+(UserOut has id/full_name; this module expects username / TokenResponse). Do not
+swap the router to this module without aligning schemas and user documents.
 """
 
 from datetime import datetime
