@@ -20,7 +20,17 @@ env/
 *.pth
 *.onnx
 *.pkl
-ml_pipeline/src/
+
+# ─── Large asset directories (SlowFast, footage, data) ─────────────────────────
+slowfast-model/
+sample-footage/
+
+# ─── Media / data files ────────────────────────────────────────────────────────
+*.mp4
+*.avi
+*.dav
+*.npy
+demo_output_*
 
 # ─── Data / outputs ────────────────────────────────────────────────────────────
 data/inputs/*
