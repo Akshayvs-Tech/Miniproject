@@ -5,15 +5,15 @@ import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { useMutation } from '@tanstack/react-query';
 import { signupSchema, SignupFormData } from '../lib/schemas';
-import { useAppContext } from '../lib/store';
+import { registerUser } from '../lib/api';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { User, Mail, Phone, Lock, ArrowRight, Eye, EyeOff } from 'lucide-react';
 
 export default function SignupPage() {
   const router = useRouter();
-  const { registerUser } = useAppContext();
   const [showPassword, setShowPassword] = useState(false);
+  const [serverError, setServerError] = useState<string | null>(null);
 
   const {
     register,
@@ -21,26 +21,30 @@ export default function SignupPage() {
     formState: { errors },
   } = useForm<SignupFormData>({
     resolver: zodResolver(signupSchema),
-    defaultValues: { agreed: undefined },
+    defaultValues: { agreed: false },
   });
 
   const signupMutation = useMutation({
     mutationFn: async (data: SignupFormData) => {
-      await new Promise((r) => setTimeout(r, 800));
-      return data;
-    },
-    onSuccess: (data) => {
-      registerUser({
-        fullName: data.fullName,
-        workEmail: data.workEmail,
-        phoneNumber: data.phoneNumber,
+      return registerUser({
+        email: data.workEmail,
         password: data.password,
+        full_name: data.fullName,
       });
+    },
+    onSuccess: () => {
+      setServerError(null);
       router.push('/login');
+    },
+    onError: (err: Error) => {
+      setServerError(err.message);
     },
   });
 
-  const onSubmit = (data: SignupFormData) => signupMutation.mutate(data);
+  const onSubmit = (data: SignupFormData) => {
+    setServerError(null);
+    signupMutation.mutate(data);
+  };
 
   return (
     <div style={{ minHeight: '100vh', background: '#eeeae4', display: 'flex', flexDirection: 'column' }}>
@@ -209,7 +213,7 @@ export default function SignupPage() {
               </div>
               <div>
                 <p style={{ color: '#fff', fontWeight: 600, fontSize: '0.875rem', marginBottom: '0.25rem' }}>Secure & Confidential</p>
-                <p style={{ color: 'rgba(255,255,255,0.5)', fontSize: '0.75rem', lineHeight: 1.5 }}>Your credentials are only stored locally in this session. Use the same email, phone, and password to log in.</p>
+                <p style={{ color: 'rgba(255,255,255,0.5)', fontSize: '0.75rem', lineHeight: 1.5 }}>Your credentials are stored securely with bcrypt hashing and JWT authentication.</p>
               </div>
             </div>
           </div>
@@ -231,6 +235,23 @@ export default function SignupPage() {
               Professional registration for the Legal Dashboard.
             </p>
 
+            {/* Server Error Banner */}
+            {serverError && (
+              <div
+                style={{
+                  padding: '0.75rem 1rem',
+                  background: '#fef2f2',
+                  border: '1px solid #fca5a5',
+                  borderRadius: '8px',
+                  marginBottom: '1rem',
+                  color: '#dc2626',
+                  fontSize: '0.82rem',
+                }}
+              >
+                {serverError}
+              </div>
+            )}
+
             <form onSubmit={handleSubmit(onSubmit)} style={{ display: 'flex', flexDirection: 'column', gap: '1.1rem' }}>
               {/* Full Name */}
               <FormField
@@ -240,7 +261,7 @@ export default function SignupPage() {
               >
                 <input
                   {...register('fullName')}
-                  placeholder="e.g. Julian Vane"
+                  placeholder="e.g. Akshay Kumar"
                   style={inputStyle(!!errors.fullName)}
                 />
               </FormField>
@@ -259,7 +280,7 @@ export default function SignupPage() {
                 />
               </FormField>
 
-              {/* Phone */}
+              {/* Phone (kept for UI, stored in DB if backend supports it) */}
               <FormField
                 label="PHONE NUMBER"
                 error={errors.phoneNumber?.message}
@@ -423,6 +444,7 @@ function FormField({
 }
 
 function inputStyle(hasError: boolean): React.CSSProperties {
+  void hasError; // used for border on wrapper, not input itself
   return {
     width: '100%',
     padding: '0.65rem 0',

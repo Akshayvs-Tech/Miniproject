@@ -21,7 +21,7 @@ function getGreeting(): string {
 
 export default function DashboardPage() {
   const router = useRouter();
-  const { profile, setUploadedFiles } = useAppContext();
+  const { profile, authUser, setUploadedFiles } = useAppContext();
   const [videoFile, setVideoFile] = useState<File | null>(null);
   const [imageFile, setImageFile] = useState<File | null>(null);
   const [isLoading, setIsLoading] = useState(false);
@@ -29,12 +29,9 @@ export default function DashboardPage() {
   const canAnalyze = videoFile !== null && imageFile !== null;
   const greeting = getGreeting();
 
-  const firstName = profile.fullName.split(' ')[0];
-  const nameParts = profile.fullName
-    .replace(/,.*$/, '')
-    .split(' ')
-    .filter((p) => p.length > 0);
-  const lastName = nameParts.length > 1 ? nameParts[nameParts.length - 1] : nameParts[0];
+  // Use the real name from backend auth, fall back to profile or generic greeting
+  const displayName = authUser?.fullName || profile.fullName || 'there';
+  const firstName = displayName.split(' ')[0];
 
   const handleAnalyze = () => {
     if (!canAnalyze) return;
@@ -117,7 +114,7 @@ export default function DashboardPage() {
                 cursor: 'pointer',
               }}
             >
-              {profile.fullName.charAt(0)}
+              {displayName.charAt(0).toUpperCase()}
             </div>
           )}
         </Link>
@@ -135,7 +132,7 @@ export default function DashboardPage() {
             lineHeight: 1.2,
           }}
         >
-          {greeting}, Counselor {lastName}
+          {greeting}, {displayName}
         </h1>
         <p style={{ color: '#9ca3af', fontSize: '0.9rem' }}>
           Select evidence files to begin AI synthesis and briefing generation.

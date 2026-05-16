@@ -5,14 +5,15 @@ import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { useMutation } from '@tanstack/react-query';
 import { loginSchema, LoginFormData } from '../lib/schemas';
+import { loginUser as apiLogin, getMe } from '../lib/api';
 import { useAppContext } from '../lib/store';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { Mail, Phone, Lock, ArrowRight, Eye, EyeOff, ShieldCheck, AlertCircle } from 'lucide-react';
+import { Mail, Lock, ArrowRight, Eye, EyeOff, ShieldCheck, AlertCircle } from 'lucide-react';
 
 export default function LoginPage() {
   const router = useRouter();
-  const { loginUser } = useAppContext();
+  const { setAuth } = useAppContext();
   const [showPassword, setShowPassword] = useState(false);
   const [loginError, setLoginError] = useState<string | null>(null);
 
@@ -26,14 +27,22 @@ export default function LoginPage() {
 
   const loginMutation = useMutation({
     mutationFn: async (data: LoginFormData) => {
-      const result = loginUser(data.email, data.phoneNumber, data.password);
-      if (!result.success) {
-        throw new Error(result.error);
-      }
-      return data;
+      // Step 1: get token
+      const tokenRes = await apiLogin({ email: data.email, password: data.password });
+      // Step 2: fetch current user profile using the token
+      const me = await getMe(tokenRes.access_token);
+      return { tokenRes, me };
     },
-    onSuccess: () => {
+    onSuccess: ({ tokenRes, me }) => {
       setLoginError(null);
+      setAuth(
+        {
+          id: me.id,
+          email: me.email,
+          fullName: me.full_name ?? me.email,
+        },
+        tokenRes.access_token
+      );
       router.push('/dashboard');
     },
     onError: (err: Error) => {
@@ -92,7 +101,7 @@ export default function LoginPage() {
         </span>
       </header>
 
-      {/* Scales of justice watermark */}
+      {/* Watermark */}
       <div
         style={{
           position: 'fixed',
@@ -142,7 +151,7 @@ export default function LoginPage() {
                 marginBottom: '0.5rem',
               }}
             >
-              Secure Counselor Access
+              Secure Access
             </h1>
             <p style={{ color: '#9ca3af', fontSize: '0.85rem', fontStyle: 'italic' }}>
               Authorized Legal Personnel Only
@@ -181,21 +190,7 @@ export default function LoginPage() {
               <input
                 {...register('email')}
                 type="email"
-                placeholder="e.g. counsel@firm.com"
-                style={inputStyle}
-              />
-            </LoginField>
-
-            {/* Phone */}
-            <LoginField
-              label="PHONE NUMBER"
-              error={errors.phoneNumber?.message}
-              icon={<Phone size={14} color="#9ca3af" />}
-            >
-              <input
-                {...register('phoneNumber')}
-                type="tel"
-                placeholder="e.g. +91 98765 4XXXX"
+                placeholder="e.g. name@firm.com"
                 style={inputStyle}
               />
             </LoginField>

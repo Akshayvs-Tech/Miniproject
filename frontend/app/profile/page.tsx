@@ -174,10 +174,7 @@ export default function ProfilePage() {
                 <div style={{ flex: 1 }}>
                   <h3 style={{ fontWeight: 600, color: '#1b2a4a', marginBottom: '0.3rem', fontSize: '0.95rem' }}>
                     Profile Photo
-                  </h3>
-                  <p style={{ color: '#6b7280', fontSize: '0.8rem', marginBottom: '0.875rem', lineHeight: 1.5 }}>
-                    Upload a professional headshot. Recommended size: 400×400px, JPG or PNG.
-                  </p>
+                  </h3> 
                   <div style={{ display: 'flex', gap: '0.625rem' }}>
                     <button
                       type="button"

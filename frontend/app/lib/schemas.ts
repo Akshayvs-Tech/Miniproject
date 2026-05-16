@@ -15,15 +15,14 @@ export const signupSchema = z.object({
   workEmail: z.string().email('Enter a valid work email'),
   phoneNumber: z.string().min(7, 'Enter a valid phone number'),
   password: z.string().min(8, 'Password must be at least 8 characters'),
-  agreed: z.literal(true, { errorMap: () => ({ message: 'You must agree to terms' }) }),
+  agreed: z.boolean().refine((v) => v === true, { message: 'You must agree to terms' }),
 });
 
 export type SignupFormData = z.infer<typeof signupSchema>;
 
-// Login schema
+// Login schema — matches backend /auth/login (email + password only)
 export const loginSchema = z.object({
   email: z.string().email('Enter a valid email'),
-  phoneNumber: z.string().min(7, 'Enter a valid phone number'),
   password: z.string().min(1, 'Password is required'),
   remember: z.boolean().optional(),
 });

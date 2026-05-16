@@ -3,12 +3,7 @@
 import { createContext, useContext, useState, ReactNode } from 'react';
 import { AnalysisResult } from './schemas';
 
-export interface RegisteredUser {
-  fullName: string;
-  workEmail: string;
-  phoneNumber: string;
-  password: string;
-}
+// ─── Types ────────────────────────────────────────────────────────────────────
 
 interface ProfileData {
   fullName: string;
@@ -17,18 +12,34 @@ interface ProfileData {
   photoUrl: string;
 }
 
+interface AuthUser {
+  id: string;
+  email: string;
+  fullName: string;
+}
+
 interface AppState {
+  // Profile (editable on Profile page)
   profile: ProfileData;
   setProfile: (data: Partial<ProfileData>) => void;
+
+  // Auth
+  authUser: AuthUser | null;
+  token: string | null;
+  setAuth: (user: AuthUser, token: string) => void;
+  clearAuth: () => void;
+
+  // Analysis
   analysisResult: AnalysisResult | null;
   setAnalysisResult: (result: AnalysisResult | null) => void;
+
+  // Uploaded files
   uploadedVideo: File | null;
   uploadedImage: File | null;
   setUploadedFiles: (video: File | null, image: File | null) => void;
-  registeredUser: RegisteredUser | null;
-  registerUser: (user: RegisteredUser) => void;
-  loginUser: (email: string, phone: string, password: string) => { success: boolean; error?: string };
 }
+
+// ─── Defaults ─────────────────────────────────────────────────────────────────
 
 const defaultProfile: ProfileData = {
   fullName: '',
@@ -37,17 +48,37 @@ const defaultProfile: ProfileData = {
   photoUrl: '',
 };
 
+// ─── Context ──────────────────────────────────────────────────────────────────
+
 const AppContext = createContext<AppState | null>(null);
 
 export function AppProvider({ children }: { children: ReactNode }) {
   const [profile, setProfileState] = useState<ProfileData>(defaultProfile);
+  const [authUser, setAuthUser] = useState<AuthUser | null>(null);
+  const [token, setToken] = useState<string | null>(null);
   const [analysisResult, setAnalysisResult] = useState<AnalysisResult | null>(null);
   const [uploadedVideo, setUploadedVideo] = useState<File | null>(null);
   const [uploadedImage, setUploadedImage] = useState<File | null>(null);
-  const [registeredUser, setRegisteredUser] = useState<RegisteredUser | null>(null);
 
   const setProfile = (data: Partial<ProfileData>) => {
     setProfileState((prev) => ({ ...prev, ...data }));
+  };
+
+  /** Called after a successful login — stores the JWT and hydrates profile from backend user */
+  const setAuth = (user: AuthUser, jwt: string) => {
+    setAuthUser(user);
+    setToken(jwt);
+    // Pre-fill profile with the name registered during signup
+    setProfileState((prev) => ({
+      ...prev,
+      fullName: user.fullName || prev.fullName,
+    }));
+  };
+
+  /** Called on logout */
+  const clearAuth = () => {
+    setAuthUser(null);
+    setToken(null);
   };
 
   const setUploadedFiles = (video: File | null, image: File | null) => {
@@ -55,40 +86,20 @@ export function AppProvider({ children }: { children: ReactNode }) {
     setUploadedImage(image);
   };
 
-  const registerUser = (user: RegisteredUser) => {
-    setRegisteredUser(user);
-    setProfileState((prev) => ({ ...prev, fullName: user.fullName }));
-  };
-
-  const loginUser = (email: string, phone: string, password: string): { success: boolean; error?: string } => {
-    if (!registeredUser) {
-      return { success: false, error: 'No account found. Please sign up first.' };
-    }
-    if (registeredUser.workEmail !== email) {
-      return { success: false, error: 'Email address does not match our records.' };
-    }
-    if (registeredUser.phoneNumber !== phone) {
-      return { success: false, error: 'Phone number does not match our records.' };
-    }
-    if (registeredUser.password !== password) {
-      return { success: false, error: 'Incorrect password. Please try again.' };
-    }
-    return { success: true };
-  };
-
   return (
     <AppContext.Provider
       value={{
         profile,
         setProfile,
+        authUser,
+        token,
+        setAuth,
+        clearAuth,
         analysisResult,
         setAnalysisResult,
         uploadedVideo,
         uploadedImage,
         setUploadedFiles,
-        registeredUser,
-        registerUser,
-        loginUser,
       }}
     >
       {children}
