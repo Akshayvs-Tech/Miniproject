@@ -16,7 +16,7 @@ if __package__ in (None, ""):
     if str(project_root) not in sys.path:
         sys.path.insert(0, str(project_root))
 
-from backend.database import client
+from backend.database import get_client
 from backend.routes import process, health, auth
 
 # ─── Lifespan ─────────────────────────────────────────────────────────────────
@@ -24,10 +24,10 @@ from backend.routes import process, health, auth
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     try:
-        await client.admin.command("ping")
+        await get_client().admin.command("ping")
         print("✅ MongoDB Atlas connected successfully")
     except Exception as e:
-        print(f"❌ MongoDB connection failed: {e}")
+        print(f"⚠️  MongoDB connection failed (server will start anyway): {e}")
     yield
 
 # ─── App ──────────────────────────────────────────────────────────────────────

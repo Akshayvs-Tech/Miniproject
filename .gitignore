@@ -16,11 +16,11 @@ env/
 .env
 
 # ─── ML model weights ──────────────────────────────────────────────────────────
-*.pt
-*.pth
+
 *.onnx
 *.pkl
 ml_pipeline/src/
+ml_pipeline/slowfast_model/pose_landmarker_lite.task
 
 # ─── Data / outputs ────────────────────────────────────────────────────────────
 data/inputs/*

@@ -2,12 +2,31 @@
 ml_pipeline/pipeline.py
 Connects all models: YOLOv8 + DeepSORT + ArcFace + OSNet.
 Called by backend/services/ml_service.py — contains NO FastAPI code.
+
+Can also be run directly as a script from the project root:
+    python -m ml_pipeline.pipeline        (preferred)
+    python ml_pipeline/pipeline.py        (also works via the path fix below)
 """
+
+import sys
+from pathlib import Path
+
+# ── Path bootstrap ────────────────────────────────────────────────────────────
+# When run as a standalone script (python ml_pipeline/pipeline.py), Python sets
+# __package__ to None and the project root is NOT on sys.path.  This guard
+# inserts it so all `from ml_pipeline import …` imports resolve correctly.
+_PROJECT_ROOT = Path(__file__).resolve().parent.parent   # Miniproject/
+if str(_PROJECT_ROOT) not in sys.path:
+    sys.path.insert(0, str(_PROJECT_ROOT))
+# Also add ml_pipeline/ itself so local torchreid is importable
+_ML_DIR = Path(__file__).resolve().parent
+if str(_ML_DIR) not in sys.path:
+    sys.path.insert(0, str(_ML_DIR))
+# ─────────────────────────────────────────────────────────────────────────────
 
 import cv2
 import numpy as np
 from dataclasses import dataclass, field
-from pathlib import Path
 from deep_sort_realtime.deepsort_tracker import DeepSort
 
 from ml_pipeline import arcface, osnet_reid, action_recognition
@@ -101,12 +120,8 @@ def run(img_path: str, vid_path: str, video_id: str) -> PipelineResult:
     frame_idx    = 0
     match_records: list[MatchRecord] = []
 
-    # Per-track state
-    track_kp_buffer = {}
-    track_kp_history = {}
-    track_vote_deque = {}
-    track_fight_timer = {}
-    track_last_action = {}
+    # Per-track action state (pose buffers + stable labels)
+    track_actions: dict[int, action_recognition.TrackActionState] = {}
 
     while True:
         ret, frame = cap.read()
@@ -160,22 +175,12 @@ def run(img_path: str, vid_path: str, video_id: str) -> PipelineResult:
                             match_type += "[Body]"
 
                 # ── Action Recognition ──
-                if track_id not in track_kp_buffer:
-                    track_kp_buffer[track_id] = deque(maxlen=action_recognition.SEQ_LEN)
-                    track_kp_history[track_id] = deque(maxlen=10)
-                    track_vote_deque[track_id] = deque(maxlen=action_recognition.VOTE_WINDOW)
-                    track_fight_timer[track_id] = [0.0]  # list for ref
-                    track_last_action[track_id] = ("analyzing...", 0.0)
+                if track_id not in track_actions:
+                    track_actions[track_id] = action_recognition.create_track_state(track_id)
 
-                kp, vis, mp_res = action_recognition.extract_keypoints(crop)
-                track_kp_buffer[track_id].append(kp)
-                track_kp_history[track_id].append(kp)
-
-                act_label, act_conf, act_src = action_recognition.predict_action(
-                    track_id, kp, track_kp_history[track_id], track_kp_buffer[track_id],
-                    mp_res, vis, track_vote_deque[track_id], track_fight_timer[track_id], fps
-                )
-                track_last_action[track_id] = (act_label, act_conf)
+                act_state = track_actions[track_id]
+                act_state.update(crop, fps)
+                display_action = act_state.display_action()
 
                 if is_match:
                     ts = round(frame_idx / fps, 3)
@@ -185,7 +190,7 @@ def run(img_path: str, vid_path: str, video_id: str) -> PipelineResult:
                         track_id=track_id,
                         similarity=round(best_sim, 4),
                         match_type=match_type,
-                        action=track_last_action[track_id][0]
+                        action=display_action,
                     )
                     match_records.append(record)
                     print(f"  [MATCH] frame={frame_idx}  t={ts}s  track={track_id}  sim={best_sim:.4f} {match_type} action={record.action}")
@@ -206,7 +211,7 @@ def run(img_path: str, vid_path: str, video_id: str) -> PipelineResult:
                 else:
                     cv2.rectangle(frame, (x1, y1), (x2, y2), (160, 160, 160), 1)
                     cv2.putText(
-                        frame, f"id:{track_id} | {track_last_action[track_id][0]}",
+                        frame, f"id:{track_id} | {display_action}",
                         (x1, max(y1 - 6, 12)),
                         cv2.FONT_HERSHEY_SIMPLEX, 0.45, (160, 160, 160), 1,
                     )
@@ -226,7 +231,16 @@ def run(img_path: str, vid_path: str, video_id: str) -> PipelineResult:
     writer.release()
     print(f"[pipeline] Done — {frame_idx} frames processed.")
 
-    # ── Step 4: Build result ──────────────────────────────────────────────────
+    # ── Step 4: Backfill generic actions with per-track stable labels ─────────
+    for rec in match_records:
+        state = track_actions.get(rec.track_id)
+        if not state:
+            continue
+        summary = action_recognition.summarize_track_action(state)
+        if rec.action in action_recognition.GENERIC_LABELS or rec.action.startswith("analyzing"):
+            rec.action = summary
+
+    # ── Step 5: Build result ──────────────────────────────────────────────────
     found = len(match_records) > 0
     best  = max(match_records, key=lambda r: r.similarity) if found else None
 
