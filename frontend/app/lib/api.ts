@@ -215,5 +215,6 @@ export async function analyzeEvidence(
     executiveSummary,
     findings,
     actionItems,
+    matchHistory: result.match_history,
   };
 }

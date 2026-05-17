@@ -46,6 +46,14 @@ export interface Finding {
   sourceType: 'video' | 'image';
 }
 
+export interface MatchRecord {
+  frame: number;
+  timestamp_sec: number;
+  track_id: number;
+  similarity: number;
+  action: string | null;
+}
+
 export interface AnalysisResult {
   caseTitle: string;
   caseRef: string;
@@ -54,4 +62,6 @@ export interface AnalysisResult {
   executiveSummary: string;
   findings: Finding[];
   actionItems: string[];
+  /** Full match history from the pipeline — used for per-person timeline on Summary page */
+  matchHistory: MatchRecord[];
 }
