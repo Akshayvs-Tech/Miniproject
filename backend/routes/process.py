@@ -19,9 +19,12 @@ router = APIRouter()
 
 @router.post("/process", response_model=ProcessResult)
 async def process(
-    image: UploadFile = File(..., description="Reference photo of the person (JPEG/PNG)"),
-    video: UploadFile = File(..., description="Video to search through (MP4/AVI)"),
+    image: UploadFile | None = File(None, description="Reference photo of the person (JPEG/PNG)"),
+    video: UploadFile | None = File(None, description="Video to search through (MP4/AVI)"),
 ):
+    if image is None or video is None:
+        raise HTTPException(status_code=400, detail="Both image and video files are required.")
+
     # Validate content types
     if image.content_type not in ("image/jpeg", "image/png"):
         raise HTTPException(status_code=400, detail="Image must be JPEG or PNG.")

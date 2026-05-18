@@ -6,6 +6,8 @@ import { useAppContext } from '../lib/store';
 import { analyzeEvidence } from '../lib/api';
 import { useMutation } from '@tanstack/react-query';
 
+let processingRequestInFlight = false;
+
 export default function ProcessingPage() {
   const router = useRouter();
   const { uploadedVideo, uploadedImage, setAnalysisResult } = useAppContext();
@@ -19,6 +21,9 @@ export default function ProcessingPage() {
     onError: () => {
       router.push('/dashboard');
     },
+    onSettled: () => {
+      processingRequestInFlight = false;
+    },
   });
 
   useEffect(() => {
@@ -26,6 +31,12 @@ export default function ProcessingPage() {
       router.push('/dashboard');
       return;
     }
+
+    if (processingRequestInFlight) {
+      return;
+    }
+
+    processingRequestInFlight = true;
     mutation.mutate();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);

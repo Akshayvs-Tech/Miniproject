@@ -37,6 +37,8 @@ from ml_pipeline.config import (
     DEEPSORT_N_INIT,
     DEEPSORT_NN_BUDGET,
     DEEPSORT_MAX_COSINE_DIST,
+    TRACK_ID_REMAP_IOU,
+    TRACK_ID_REMAP_MAX_GAP,
 )
 from collections import deque
 
@@ -115,6 +117,57 @@ def run(img_path: str, vid_path: str, video_id: str) -> PipelineResult:
         max_cosine_distance=DEEPSORT_MAX_COSINE_DIST,
     )
 
+    # Track-ID remap state to reduce ID switches
+    id_alias: dict[int, int] = {}
+    recent_tracks: dict[int, tuple[tuple[int, int, int, int], int]] = {}
+
+    def _bbox_iou(a, b) -> float:
+        ax1, ay1, ax2, ay2 = a
+        bx1, by1, bx2, by2 = b
+        inter_x1 = max(ax1, bx1)
+        inter_y1 = max(ay1, by1)
+        inter_x2 = min(ax2, bx2)
+        inter_y2 = min(ay2, by2)
+        inter_w = max(0, inter_x2 - inter_x1)
+        inter_h = max(0, inter_y2 - inter_y1)
+        inter_area = inter_w * inter_h
+        if inter_area == 0:
+            return 0.0
+        area_a = max(0, ax2 - ax1) * max(0, ay2 - ay1)
+        area_b = max(0, bx2 - bx1) * max(0, by2 - by1)
+        return float(inter_area / (area_a + area_b - inter_area + 1e-6))
+
+    def _resolve_track_id(raw_id: int, bbox, frame_idx: int, used_ids: set[int]) -> int:
+        # If we already mapped this raw ID, reuse it unless it conflicts this frame
+        if raw_id in id_alias:
+            canonical_id = id_alias[raw_id]
+            if canonical_id in used_ids:
+                canonical_id = raw_id
+                id_alias[raw_id] = canonical_id
+            recent_tracks[canonical_id] = (bbox, frame_idx)
+            return canonical_id
+
+        best_id = None
+        best_iou = 0.0
+        for cand_id, (cand_bbox, last_seen) in list(recent_tracks.items()):
+            if frame_idx - last_seen > TRACK_ID_REMAP_MAX_GAP:
+                continue
+            if cand_id in used_ids:
+                continue
+            iou = _bbox_iou(bbox, cand_bbox)
+            if iou > best_iou:
+                best_iou = iou
+                best_id = cand_id
+
+        if best_id is not None and best_iou >= TRACK_ID_REMAP_IOU:
+            id_alias[raw_id] = best_id
+            recent_tracks[best_id] = (bbox, frame_idx)
+            return best_id
+
+        id_alias[raw_id] = raw_id
+        recent_tracks[raw_id] = (bbox, frame_idx)
+        return raw_id
+
     # ── Step 3: Frame loop ──────────────────────────────────────────────────
     # ── Step 3: Global state for action recognition ─────────────────────────
     frame_idx    = 0
@@ -122,6 +175,9 @@ def run(img_path: str, vid_path: str, video_id: str) -> PipelineResult:
 
     # Per-track action state (pose buffers + stable labels)
     track_actions: dict[int, action_recognition.TrackActionState] = {}
+
+    # Canonical target ID once the person is matched at least once
+    target_id: int | None = None
 
     while True:
         ret, frame = cap.read()
@@ -131,20 +187,36 @@ def run(img_path: str, vid_path: str, video_id: str) -> PipelineResult:
         if frame_idx % FRAME_SKIP == 0:
             detections = osnet_reid.detect_persons(frame)
 
-            ds_input = [
-                ([x1, y1, x2 - x1, y2 - y1], conf, "person")
-                for x1, y1, x2, y2, conf in detections
-            ]
+            # Filter detections by confidence and minimum crop size to reduce
+            # spurious detections and improve tracking / action recognition.
+            from ml_pipeline.osnet_reid import MIN_CROP_H, MIN_CROP_W
+
+            ds_input = []
+            for x1, y1, x2, y2, conf in detections:
+                w = int(x2 - x1)
+                h = int(y2 - y1)
+                # Skip very low-confidence detections
+                if conf < 0.25:
+                    continue
+                # Skip small crops that will harm re-id and pose estimation
+                if h < MIN_CROP_H or w < MIN_CROP_W:
+                    continue
+                ds_input.append(([x1, y1, w, h], conf, "person"))
             tracks = tracker.update_tracks(ds_input, frame=frame)
+
+            used_ids: set[int] = set()
 
             for track in tracks:
                 if not track.is_confirmed():
                     continue
 
-                track_id = track.track_id
+                raw_id = track.track_id
                 x1, y1, x2, y2 = map(int, track.to_ltrb())
                 x1, y1 = max(0, x1), max(0, y1)
                 x2, y2 = min(width, x2), min(height, y2)
+
+                canonical_id = _resolve_track_id(raw_id, (x1, y1, x2, y2), frame_idx, used_ids)
+                used_ids.add(canonical_id)
 
                 crop = frame[y1:y2, x1:x2]
                 if crop.size == 0:
@@ -175,30 +247,45 @@ def run(img_path: str, vid_path: str, video_id: str) -> PipelineResult:
                             match_type += "[Body]"
 
                 # ── Action Recognition ──
-                if track_id not in track_actions:
-                    track_actions[track_id] = action_recognition.create_track_state(track_id)
+                if canonical_id not in track_actions:
+                    track_actions[canonical_id] = action_recognition.create_track_state(canonical_id)
 
-                act_state = track_actions[track_id]
+                act_state = track_actions[canonical_id]
                 act_state.update(crop, fps)
                 display_action = act_state.display_action()
+
+                # If this is a match and we already have a target ID, remap
+                # the current track to the target ID to avoid ID switches.
+                effective_id = canonical_id
+                if is_match:
+                    if target_id is None:
+                        target_id = canonical_id
+                    elif canonical_id != target_id:
+                        id_alias[raw_id] = target_id
+                        recent_tracks[target_id] = ((x1, y1, x2, y2), frame_idx)
+                        effective_id = target_id
+                        # Keep action history under the canonical target ID
+                        track_actions[target_id] = act_state
+                        if canonical_id in track_actions and canonical_id != target_id:
+                            del track_actions[canonical_id]
 
                 if is_match:
                     ts = round(frame_idx / fps, 3)
                     record = MatchRecord(
                         frame=frame_idx,
                         timestamp_sec=ts,
-                        track_id=track_id,
+                        track_id=effective_id,
                         similarity=round(best_sim, 4),
                         match_type=match_type,
                         action=display_action,
                     )
                     match_records.append(record)
-                    print(f"  [MATCH] frame={frame_idx}  t={ts}s  track={track_id}  sim={best_sim:.4f} {match_type} action={record.action}")
+                    print(f"  [MATCH] frame={frame_idx}  t={ts}s  track={effective_id}  sim={best_sim:.4f} {match_type} action={record.action}")
 
                     cv2.rectangle(frame, (x1, y1), (x2, y2), (0, 255, 0), 2)
                     cv2.putText(
                         frame,
-                        f"TARGET {match_type} id:{track_id} sim:{best_sim:.2f}",
+                        f"TARGET {match_type} id:{effective_id} sim:{best_sim:.2f}",
                         (x1, max(y1 - 25, 15)),
                         cv2.FONT_HERSHEY_SIMPLEX, 0.55, (0, 255, 0), 2,
                     )
@@ -211,7 +298,7 @@ def run(img_path: str, vid_path: str, video_id: str) -> PipelineResult:
                 else:
                     cv2.rectangle(frame, (x1, y1), (x2, y2), (160, 160, 160), 1)
                     cv2.putText(
-                        frame, f"id:{track_id} | {display_action}",
+                        frame, f"id:{canonical_id} | {display_action}",
                         (x1, max(y1 - 6, 12)),
                         cv2.FONT_HERSHEY_SIMPLEX, 0.45, (160, 160, 160), 1,
                     )

@@ -117,9 +117,13 @@ export async function analyzeEvidence(
   video: File,
   image: File
 ): Promise<AnalysisResult> {
+  if (!(video instanceof File) || !(image instanceof File)) {
+    throw new Error('Both image and video must be valid File objects.');
+  }
+
   const formData = new FormData();
-  formData.append('video', video);
-  formData.append('image', image);
+  formData.append('video', video, video.name || 'video.mp4');
+  formData.append('image', image, image.name || 'image.jpg');
 
   const res = await fetch(`${BASE_URL}/process`, {
     method: 'POST',
@@ -216,5 +220,6 @@ export async function analyzeEvidence(
     findings,
     actionItems,
     matchHistory: result.match_history,
+    matchedTrackIds: result.matched_track_ids,
   };
 }

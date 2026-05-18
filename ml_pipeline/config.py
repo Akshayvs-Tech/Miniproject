@@ -43,11 +43,17 @@ OSNET_STD                = [0.229, 0.224, 0.225]
 
 # ─── Pipeline Config ──────────────────────────────────────────────────────────
 
-FRAME_SKIP               = 2              # process every N-th frame
-DEEPSORT_MAX_AGE         = 30
+FRAME_SKIP               = 1              # process every frame for more stable tracking
+# DeepSORT tuning: keep tracks alive a bit longer through brief occlusions
+# and confirm sooner to reduce repeated new IDs for the same person.
+DEEPSORT_MAX_AGE         = 45
 DEEPSORT_N_INIT          = 3
 DEEPSORT_NN_BUDGET       = 100
-DEEPSORT_MAX_COSINE_DIST = 0.3
+DEEPSORT_MAX_COSINE_DIST = 0.30
+
+# Track ID remap settings (IoU-based) to reduce ID switches after brief drops
+TRACK_ID_REMAP_IOU       = 0.50
+TRACK_ID_REMAP_MAX_GAP   = 20           # frames
 
 # ─── Ensure data dirs exist ───────────────────────────────────────────────────
 
