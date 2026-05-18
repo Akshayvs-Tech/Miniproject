@@ -42,7 +42,7 @@ async def register(user_data: UserCreate):
     new_user = {
         "_id": user_id,
         "email": email,
-        "password": hashed_pass, // uses B-CRYPT HASHING USED (prevents brute force attack, if 2 users register using same password, then the both hash values will be different)
+        "password": hashed_pass, 
         "full_name": user_data.full_name
     }
 
@@ -78,7 +78,7 @@ async def login(credentials: UserLogin):
             headers={"WWW-Authenticate": "Bearer"},
         )
     
-    access_token = create_access_token(data={"sub": user["_id"]}) //jwt-json web token used
+    access_token = create_access_token(data={"sub": user["_id"]}) 
     return {"access_token": access_token, "token_type": "bearer"}
 
 @router.get("/me", response_model=UserOut)
