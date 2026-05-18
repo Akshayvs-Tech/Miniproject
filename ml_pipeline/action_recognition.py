@@ -30,9 +30,10 @@ VOTE_WINDOW          = 10
 FIGHT_MIN_SECONDS    = 1.5
 STABLE_VOTE_MIN      = 3           # frames needed for stable label
 
-STAND_MOTION_MAX     = 0.022
-WALK_MOTION_MIN      = 0.018
-RUN_MOTION_MIN       = 0.045
+STAND_MOTION_MAX     = 0.017
+SIT_MOTION_MAX       = 0.020
+WALK_MOTION_MIN      = 0.014
+RUN_MOTION_MIN       = 0.035
 STAND_KNEE_MIN       = 145
 BACK_VISIBILITY_MAX  = 0.35
 MIN_PERSON_H         = 80          # upscale crop below this height
@@ -105,7 +106,18 @@ class TrackActionState:
     stable_conf: float = 0.0
 
     def update(self, crop, fps: float) -> tuple[str, float, str]:
-        kp, vis, nose_vis = extract_keypoints(crop)
+        kp_raw, vis, nose_vis = extract_keypoints(crop)
+
+        # Temporal smoothing: average last few keypoints including current frame
+        hist_preview = list(self.kp_history) + [kp_raw]
+        if len(hist_preview) >= 3:
+            smoothed = np.mean(hist_preview[-3:], axis=0)
+        else:
+            smoothed = np.mean(hist_preview, axis=0)
+
+        kp = smoothed.astype(float)
+
+        # Append smoothed keypoints to buffers
         self.kp_buffer.append(kp)
         self.kp_history.append(kp)
 
@@ -156,8 +168,8 @@ def _init_pose_backend():
             _mp_pose = mp.solutions.pose.Pose(
                 static_image_mode=True,
                 model_complexity=1,
-                min_detection_confidence=0.45,
-                min_tracking_confidence=0.45,
+                min_detection_confidence=0.50,
+                min_tracking_confidence=0.50,
             )
             _pose_backend = "legacy"
             print("[Action] MediaPipe Pose (legacy solutions) initialized")
@@ -179,9 +191,9 @@ def _init_pose_backend():
             base_options=mp_tasks.BaseOptions(model_asset_path=str(POSE_MODEL_PATH)),
             running_mode=vision.RunningMode.IMAGE,
             num_poses=1,
-            min_pose_detection_confidence=0.45,
-            min_pose_presence_confidence=0.45,
-            min_tracking_confidence=0.45,
+            min_pose_detection_confidence=0.50,
+            min_pose_presence_confidence=0.50,
+            min_tracking_confidence=0.50,
         )
         _pose_landmarker = vision.PoseLandmarker.create_from_options(options)
         _pose_backend = "tasks"
@@ -268,7 +280,29 @@ def _prepare_lstm_sequence(kp_buffer) -> list | None:
     if len(buf) < SEQ_LEN:
         pad = [buf[0]] * (SEQ_LEN - len(buf))
         buf = pad + buf
-    return buf
+    # Normalize sequence to be translation- and scale-invariant.
+    def _normalize_frame(kp):
+        # kp is (99,) => 33 landmarks of (x,y,z)
+        kp = np.array(kp).reshape(-1, 3)
+        # center on hips midpoint
+        left_hip = kp[LM_MAP['left_hip']]
+        right_hip = kp[LM_MAP['right_hip']]
+        center = (left_hip + right_hip) / 2.0
+
+        # scale by torso height (shoulder midpoint to ankle midpoint)
+        left_sh = kp[LM_MAP['left_shoulder']]
+        right_sh = kp[LM_MAP['right_shoulder']]
+        sh_mid = (left_sh + right_sh) / 2.0
+        left_ank = kp[LM_MAP['left_ankle']]
+        right_ank = kp[LM_MAP['right_ankle']]
+        an_mid = (left_ank + right_ank) / 2.0
+        torso_h = np.linalg.norm(sh_mid - an_mid) + 1e-6
+
+        norm = (kp - center) / torso_h
+        return norm.flatten()
+
+    norm_buf = [_normalize_frame(f) for f in buf]
+    return norm_buf
 
 
 # ─── Keypoints ────────────────────────────────────────────────────────────────
@@ -343,8 +377,9 @@ def instant_posture_guess(kp, kp_history) -> tuple[str, float]:
     hip_knee_gap = avg_knee_y - avg_hip_y
 
     if avg_ka < 120 or (avg_ka < 145 and hip_knee_gap < 0.08):
-        return "sit", 0.72
-    if avg_ka > STAND_KNEE_MIN and torso_ratio > 0.30:
+        if motion < SIT_MOTION_MAX:
+            return "sit", 0.72
+    if avg_ka > STAND_KNEE_MIN and torso_ratio > 0.30 and motion < STAND_MOTION_MAX:
         return "stand", 0.70
     return "stand", 0.45
 
@@ -394,7 +429,8 @@ def rule_based_action(kp, kp_history, nose_vis: float):
     motion = _motion_magnitude(kp_history)
 
     if avg_ka < 120 or (avg_ka < 145 and hip_knee_gap < 0.08):
-        return "sit", 0.88
+        if motion < SIT_MOTION_MAX:
+            return "sit", 0.88
 
     knee_diff = abs(l_ka - r_ka)
     if knee_diff > 28 and avg_ka < 145 and torso_ratio < 0.50 and motion > 0.01:
@@ -405,7 +441,7 @@ def rule_based_action(kp, kp_history, nose_vis: float):
         (abs(l_wrist[1] - face_y) < 0.15 and abs(l_wrist[0] - nose[0]) < 0.20)
         or (abs(r_wrist[1] - face_y) < 0.15 and abs(r_wrist[0] - nose[0]) < 0.20)
     )
-    if wrist_near and motion < 0.03:
+    if wrist_near and motion < STAND_MOTION_MAX:
         return "stand", 0.78
 
     if avg_ka > STAND_KNEE_MIN and torso_ratio > 0.35 and motion < STAND_MOTION_MAX:
@@ -443,7 +479,7 @@ def _filter_lstm_label(
 ) -> tuple[str, float]:
     label, conf = raw_label, raw_conf
 
-    if label in ("walk", "run") and motion < WALK_MOTION_MIN:
+    if label in ("walk", "run") and motion < (WALK_MOTION_MIN * 0.8):
         label, conf = "stand", 0.85
 
     if label == "fight" and visibility < 0.50:

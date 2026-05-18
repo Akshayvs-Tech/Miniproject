@@ -137,10 +137,14 @@ export default function SummaryPage() {
 
   if (!analysisResult) return null;
 
-  const timelines = useMemo(
-    () => groupByPerson(analysisResult.matchHistory ?? []),
-    [analysisResult.matchHistory]
-  );
+  const timelines = useMemo(() => {
+    const matchedIds = analysisResult.matchedTrackIds ?? [];
+    // If matched IDs exist, filter to only those tracks; otherwise, build from all records
+    const records = (analysisResult.matchHistory ?? []).filter(r =>
+      matchedIds.length > 0 ? matchedIds.includes(r.track_id) : true
+    );
+    return groupByPerson(records);
+  }, [analysisResult.matchHistory, analysisResult.matchedTrackIds]);
 
   const noData = timelines.length === 0;
 

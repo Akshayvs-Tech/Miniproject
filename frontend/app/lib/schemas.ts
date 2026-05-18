@@ -64,4 +64,6 @@ export interface AnalysisResult {
   actionItems: string[];
   /** Full match history from the pipeline — used for per-person timeline on Summary page */
   matchHistory: MatchRecord[];
+  /** Track IDs that the pipeline identified as matches (target person) */
+  matchedTrackIds?: number[];
 }
